@@ -123,7 +123,7 @@ int main() {
     cudaEventSynchronize(stop);
     float elapsedTime;
     cudaEventElapsedTime(&elapsedTime, start, stop);
-    cout << "Time to generate: " << elapsedTime << " s\n";
+    cout << "Time to generate: " << elapsedTime << " ms\n";
 
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
@@ -144,8 +144,9 @@ __global__ void kernel(Sphere *s, uchar *ptr) {
     int x = threadIdx.x + blockIdx.x * blockDim.x;
     int y = threadIdx.y + blockIdx.y * blockDim.y;
     int offset = x + y * blockDim.x * gridDim.x;
-    float ox = x - DIM / 2;
-    float oy = y - DIM / 2;
+    // float ox = x - DIM / 2;
+    // float oy = y - DIM / 2;
+    float ox = x, oy = y;
     float r = 0, g = 0, b = 0;
     float maxz = -INF;
 
