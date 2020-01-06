@@ -1,0 +1,58 @@
+{
+	"folders": [
+		{
+			"path": "C:\\Users\\Hyogun\\Documents\\C++_Projects"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"complex": "cpp",
+			"iostream": "cpp",
+			"cmath": "cpp",
+			"iosfwd": "cpp",
+			"ostream": "cpp",
+			"xstring": "cpp",
+			"fstream": "cpp",
+			"xiosbase": "cpp",
+			"istream": "cpp",
+			"algorithm": "cpp",
+			"cctype": "cpp",
+			"concepts": "cpp",
+			"cstddef": "cpp",
+			"cstdint": "cpp",
+			"cstdio": "cpp",
+			"cstdlib": "cpp",
+			"cstring": "cpp",
+			"ctime": "cpp",
+			"cwchar": "cpp",
+			"exception": "cpp",
+			"initializer_list": "cpp",
+			"iomanip": "cpp",
+			"ios": "cpp",
+			"limits": "cpp",
+			"memory": "cpp",
+			"new": "cpp",
+			"sstream": "cpp",
+			"stdexcept": "cpp",
+			"streambuf": "cpp",
+			"string": "cpp",
+			"system_error": "cpp",
+			"tuple": "cpp",
+			"type_traits": "cpp",
+			"typeinfo": "cpp",
+			"utility": "cpp",
+			"xfacet": "cpp",
+			"xlocale": "cpp",
+			"xlocinfo": "cpp",
+			"xlocmon": "cpp",
+			"xlocnum": "cpp",
+			"xloctime": "cpp",
+			"xmemory": "cpp",
+			"xstddef": "cpp",
+			"xtr1common": "cpp",
+			"xutility": "cpp",
+			"vector": "cpp",
+			"random": "cpp"
+		}
+	}
+}

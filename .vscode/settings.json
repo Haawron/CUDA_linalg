@@ -1,0 +1,14 @@
+{
+    "files.associations": {
+        "iosfwd": "cpp",
+        "iostream": "cpp",
+        "iomanip": "cpp",
+        "complex": "cpp",
+        "*.cu": "cpp"
+    },
+    "python.pythonPath": "C:\\Users\\Hyogun\\Anaconda3\\envs\\py36\\python.exe",
+    "python.linting.pylintEnabled": true,
+    "python.linting.flake8Enabled": false,
+    "python.linting.enabled": false,
+    "python.linting.mypyEnabled": false
+}
