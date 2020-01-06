@@ -3,8 +3,7 @@
 using namespace std;
 
 int main() {
-    cout << rand() / (double)RAND_MAX << endl;
-    cout << rand() / (double)RAND_MAX << endl;
-    cout << rand() / (double)RAND_MAX << endl;
-    cout << rand() / (double)RAND_MAX << endl;
+    int a = 1;
+    int &b = a;
+    cout << b << endl;
 }

@@ -45,32 +45,22 @@ def get_bpg(matrix):
     blockspergrid_Y = round(.5 + y / threadsperblock[1])
     return blockspergrid_X, blockspergrid_Y
 
-@cuda.jit
-def dev_matmul(A, B, C):
-    x, y = cuda.grid(2)
-    if x < C.shape[0] and y < C.shape[1]:
-        tmp = 0.
-        for k in range(A.shape[1]):
-            tmp += A[x, k] * B[k, y]
-        C[x, y] = tmp
-    cuda.syncthreads()
-
-def host_matmul(A, B) -> cuda.cudadrv.devicearray.DeviceNDArray:
-    res_shape = A.shape[0], B.shape[1]
-    blockspergrid = get_bpg(res_shape)
-    C = cuda.device_array(res_shape, dtype=dtype)
-    dev_matmul[blockspergrid, threadsperblock](A, B, C)
-    return C
-
 # @cuda.jit
-# def dev_dot(X, theta, y):
-#     x, _ = cuda.grid(2)
-#     if x < X.shape[0]:
+# def dev_matmul(A, B, C):
+#     x, y = cuda.grid(2)
+#     if x < C.shape[0] and y < C.shape[1]:
 #         tmp = 0.
-#         for k in range(X.shape[1]):
-#             tmp += X[x, k] * theta[k, 0]
-#         y[x, 0] = tmp
+#         for k in range(A.shape[1]):
+#             tmp += A[x, k] * B[k, y]
+#         C[x, y] = tmp
 #     cuda.syncthreads()
+
+# def host_matmul(A, B) -> cuda.cudadrv.devicearray.DeviceNDArray:
+#     res_shape = A.shape[0], B.shape[1]
+#     blockspergrid = get_bpg(res_shape)
+#     C = cuda.device_array(res_shape, dtype=dtype)
+#     dev_matmul[blockspergrid, threadsperblock](A, B, C)
+#     return C
 
 @cuda.jit
 def dev_dot(X, theta, y):
