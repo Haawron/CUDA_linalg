@@ -64,7 +64,7 @@ struct Header {
     BMPInfoHeader infoheader;
     Header() {
         fileheader.file_size = 54 + 3 * DIM * DIM;
-    };
+    }
 };
 #pragma pack(pop)
 
@@ -94,7 +94,6 @@ int main() {
     cudaEventRecord(start, 0);
 
     uchar *bitmap = new uchar[3 * DIM * DIM];
-    // header, color
     uchar *dev_bitmap;
     Sphere *s;
 
@@ -120,14 +119,21 @@ int main() {
     kernel<<<grids, threads>>>(s, dev_bitmap);
     cudaMemcpy(bitmap, dev_bitmap, sizeof(uchar) * 3 * DIM * DIM, cudaMemcpyDeviceToHost);
 
-    for (int i = 0; i < 10; i++) cout << (int)bitmap[i] << endl;
+    cudaEventRecord(stop, 0);
+    cudaEventSynchronize(stop);
+    float elapsedTime;
+    cudaEventElapsedTime(&elapsedTime, start, stop);
+    cout << "Time to generate: " << elapsedTime << " s\n";
+
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
 
     // draw
+    Header header;
     ofstream out;
     out.open("with_pure_CUDA/nonconst.bmp", ios::binary);
-    out.write((char*)new Header(), sizeof(Header));
-    for (int i = 0; i < DIM; i++) for (int j = 0; j < DIM; j++) for (int k = 0; k < 3; k++)
-        out.write((char*)(bitmap + i * DIM + 3 * j + k), sizeof(uchar));
+    out.write((char*)&header, sizeof(Header));
+    out.write((char*)bitmap, 3 * DIM * DIM);
 
     cudaFree(dev_bitmap);
     cudaFree(s);
@@ -151,6 +157,7 @@ __global__ void kernel(Sphere *s, uchar *ptr) {
             r = s[i].r * fscale;
             g = s[i].g * fscale;
             b = s[i].b * fscale;
+            maxz = t;
         }
     }
     
