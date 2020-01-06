@@ -1,3 +1,8 @@
+/*
+** Originally copied from
+** https://github.com/CodedK/CUDA-by-Example-source-code-for-the-book-s-examples-/blob/master/chapter06/ray_noconst.cu
+** With a few bugs fixed
+*/
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <fstream>
