@@ -100,7 +100,7 @@ int main() {
         t1 = chrono::system_clock::now();
         dt = t1 - t0;
         printf(
-            "Iterated: %4d, N: %6d, d: %6d, err: %10.5f, t: %8.3f ms, time/iter: %9.4f ms\n",
+            "Iterated: %4d, N: %6d, d: %6d, err: %10.5f, t: %9.3f ms, time/iter: %9.4f ms\n",
             iter, N, d, F0, dt.count() * 1000, dt.count() / iter * 1000
         );
 

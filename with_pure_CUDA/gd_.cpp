@@ -2,6 +2,7 @@
 #include <cublas_v2.h>
 
 #include <iostream>
+#include <random>
 #include <cmath>
 #include <chrono>
 #include <unistd.h>
@@ -12,17 +13,17 @@ using namespace std;
 #define rrnd() (rnd(6.f) - (3.f))
 
 void generate_conditions(int N, int d, float *X, float *y);
-cublasStatus_t eval(
+inline cublasStatus_t eval(
     cublasHandle_t handle,
     float *d_X, float *d_theta, float *copied_d_y,
     int N, int d
 );
-cublasStatus_t F(
+inline cublasStatus_t F(
     cublasHandle_t handle,
     float *d_X, float *d_theta, float *copied_d_y,
     int N, int d, float &result
 );
-cublasStatus_t newtheta(
+inline cublasStatus_t newtheta(
     cublasHandle_t handle,
     float *d_X, float *copied_d_theta, float *copied_d_y,
     int N, int d, float h
@@ -117,7 +118,7 @@ void generate_conditions(int N, int d, float *X, float *y) {
     for (int i = 0; i < N; i++) y[i] = rrnd();
 }
 
-cublasStatus_t
+inline cublasStatus_t
 eval(
     cublasHandle_t handle,
     float *d_X, float *d_theta, float *copied_d_y,
@@ -136,7 +137,7 @@ eval(
     return stat;
 }
 
-cublasStatus_t
+inline cublasStatus_t
 F(
     cublasHandle_t handle,
     float *d_X, float *d_theta, float *copied_d_y,
@@ -151,7 +152,7 @@ F(
     return stat;
 }
 
-cublasStatus_t
+inline cublasStatus_t
 newtheta(
     cublasHandle_t handle,
     float *d_X, float *copied_d_theta, float *copied_d_y,
