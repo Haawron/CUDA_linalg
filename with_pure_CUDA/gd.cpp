@@ -35,6 +35,7 @@ int main() {
     chrono::duration<double> dt;
 
     for (int N = 1e3; N < 1e6; N *= 10) for (int d = 1e2; d < 1e6; d *= 10) {
+        h = 1e-2;
         X = new float[N * d];
         y = new float[N];
         theta = new float[d];
@@ -110,12 +111,26 @@ int main() {
         cudaFree(d_theta1);
         cudaFree(d_tmpy);
         delete[] X, y, theta;
+        cublasDestroy(handle);
     }
-    cublasDestroy(handle);
 }
 
 void generate_conditions(int N, int d, float *X, float *y) {
-    for (int i = 0; i < N; i++) for (int j = 0; j < d; j++)
-        X[IDX2C(i, j, N)] = rrnd();
-    for (int i = 0; i < N; i++) y[i] = rrnd();
+    // for (int i = 0; i < N; i++) for (int j = 0; j < d; j++)
+    //     X[IDX2C(i, j, N)] = rrnd();
+    // for (int i = 0; i < N; i++) y[i] = rrnd();
+
+    float *env = new float[d];
+    float sum;
+    for (int i = 0; i < N; i++) {
+        sum = 0;
+        for (int j = 0; j < d; j++) {
+            X[IDX2C(i, j, N)] = rrnd() * 3.;
+            env[j] = rrnd();
+        }
+        for (int j = 0; j < d; j++)
+            sum += X[IDX2C(i, j, N)] * env[j];
+        y[i] = sum;
+    }
+    delete[] env;
 }
