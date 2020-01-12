@@ -38,6 +38,7 @@
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}",
                 "-lcublas",
+                "-lcurand",
                 "-std=c++11"
             ],
             "group": "build"

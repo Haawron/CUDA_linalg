@@ -29,55 +29,58 @@ int main() {
 
     cudaProfilerStart();
 
-    cublasHandle_t handle;
-    cublasCreate(&handle);
-
-    float *dA, *dx, *dy, *dx1;
+    const int nDev = 4;
+    float *dA[nDev], *dx, *dy, *dx1;
     float h, F0, F1;
     int updated, realiter, niter = 30;
+
+    cublasHandle_t handle;  // functionalize(?)
+    cublasCreate(&handle);
 
     chrono::system_clock::time_point t0, t1;
     chrono::duration<double> dt, dt1, dtrans;
 
-    for (long long N = 1e3; N < 1e6; N *= 10) for (long long d = 1e2; d < 1e6; d *= 10) {
-        h = 1e-2;
-        t1 = now();
-        gpuErrchk(cudaMalloc((void**)&dA, N * d * sizeof(float)));
-        gpuErrchk(cudaMalloc((void**)&dx, d * sizeof(float)));
-        gpuErrchk(cudaMalloc((void**)&dy, N * sizeof(float)));
-        gpuErrchk(cudaMalloc((void**)&dx1, d * sizeof(float)));
-        t0 = now();
-        dtrans = generate_conditions(handle, dA, dx, dy, N, d);
-        dt1 = now() - t1 - dtrans;
+    const long long N = 1e5, d = 1e5;
 
-        F(handle, dA, dx, dy, N, d, F0); realiter = 0;
-        for (int iter = 0; iter < niter; iter+=updated, realiter++) {
-            cublasScopy(handle, d, dx, 1, dx1, 1);
-            newtheta(handle, dA, dx1, dy, N, d, h);
-            F(handle, dA, dx1, dy, N, d, F1);
-            if (F1 > F0) {
-                updated = 0;
-                h /= 2.f;
-            } else {
-                updated = 1;
-                cublasScopy(handle, d, dx1, 1, dx, 1);
-                h *= 1.2f;
-                F0 = F1;
-            }
+    h = 1e-2;
+    t1 = now();
+    for (int i = 0; i < nDev; i++)
+    gpuErrchk(cudaMalloc((void**)&dA[i], (N / nDev) * d * sizeof(float)));
+    gpuErrchk(cudaMalloc((void**)&dx, d * sizeof(float)));
+    gpuErrchk(cudaMalloc((void**)&dy, N * sizeof(float)));
+    gpuErrchk(cudaMalloc((void**)&dx1, d * sizeof(float)));
+    t0 = now();
+    dtrans = generate_conditions(handle, dA, dx, dy, N, d);
+    dt1 = now() - t1 - dtrans;
+
+    F(handle, dA, dx, dy, N, d, F0); realiter = 0;
+    for (int iter = 0; iter < niter; iter+=updated, realiter++) {
+        cublasScopy(handle, d, dx, 1, dx1, 1);
+        newtheta(handle, dA, dx1, dy, N, d, h);
+        F(handle, dA, dx1, dy, N, d, F1);
+        if (F1 > F0) {
+            updated = 0;
+            h /= 2.f;
+        } else {
+            updated = 1;
+            cublasScopy(handle, d, dx1, 1, dx, 1);  // actual update
+            h *= 1.2f;
+            F0 = F1;
         }
-
-        cudaFree(dA);
-        cudaFree(dx);
-        cudaFree(dy);
-        cudaFree(dx1);
-
-        dt = now() - t0;
-
-        printf(
-            "N: %6lld, d: %6lld, t_init: %7.3f ms, t_trans: %8.5f s, iterated: %4d, rmse: %10.5f, t: %8.5f s, time/iter: %9.4f ms\n",
-            N, d, dt1.count() * 1000, dtrans.count(), realiter, F0, dt.count(), dt.count() / realiter * 1000
-        );
     }
+
+    cudaFree(dA);
+    cudaFree(dx);
+    cudaFree(dy);
+    cudaFree(dx1);
+
+    dt = now() - t0;
+
+    printf(
+        "N: %6lld, d: %6lld, t_init: %7.3f ms, t_trans: %8.5f s, iterated: %4d, rmse: %10.5f, t: %8.5f s, time/iter: %9.4f ms\n",
+        N, d, dt1.count() * 1000, dtrans.count(), realiter, F0, dt.count(), dt.count() / realiter * 1000
+    );
+
     cublasDestroy(handle);
     cudaDeviceReset();
     cudaProfilerStop();
