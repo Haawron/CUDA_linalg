@@ -1,123 +1,56 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
-#include <cuda_profiler_api.h>
+#include <device_launch_parameters.h>
 #include <curand.h>
+#include <nccl.h>
 
 #include <iostream>
+#include <thread>
+#include <vector>
+#include <memory>
 #include <chrono>
 #include <cmath>
+#include <functional>
 using namespace std;
 
 #define IDX2C(i, j, ld) (((j) * (ld)) + (i))
 #define now() chrono::system_clock::now()
 #define SEED 960501
 
-#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true) {
-   if (code != cudaSuccess) {
-      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
-}
+#define CUDACHECK(cmd) do {                             \
+    cudaError_t e = cmd;                                \
+    if( e != cudaSuccess ) {                            \
+        printf("Failed: Cuda error %s:%d '%s'\n",       \
+            __FILE__,__LINE__,cudaGetErrorString(e));   \
+        exit(EXIT_FAILURE);                             \
+    }                                                   \
+} while(0)
 
-void GPU_fill_rand(float *dx, int size, float mean, float std);
-chrono::duration<double> generate_conditions(cublasHandle_t handle, float *dA, float *dx, float *dy, int N, int d);
-void F(cublasHandle_t handle, float *dA, float *dx, float *dy, int N, int d, float &result);
-void newtheta(cublasHandle_t handle, float *dA, float *dx, float *dy, int N, int d, float h);
 
-int main() {
+#define NCCLCHECK(cmd) do {                             \
+    ncclResult_t r = cmd;                               \
+    if (r!= ncclSuccess) {                              \
+        printf("Failed, NCCL error %s:%d '%s'\n",       \
+            __FILE__,__LINE__,ncclGetErrorString(r));   \
+        exit(EXIT_FAILURE);                             \
+    }                                                   \
+} while(0)
 
-    cudaProfilerStart();
 
-    const int nDev = 4;
-    float *dA[nDev], *dx, *dy, *dx1;
-    float h, F0, F1;
-    int updated, realiter, niter = 30;
+// global variable init
+const int nGPU = 4;
+const uint64_t N = 12, d = 4;
+const uint64_t Nd = N * d;
+const uint64_t NdGPU = Nd / nGPU;
+float *h_X, *h_y, *h_theta;
+float *d_X[nGPU];
+float *d_y[nGPU];
+float *d_theta[nGPU];
+float F0[nGPU], F1[nGPU];
+ncclComm_t *comms = new ncclComm_t[nGPU];
+cudaStream_t *nccl_streams = new cudaStream_t[nGPU];
+cudaStream_t *blas_streams = new cudaStream_t[nGPU];
 
-    cublasHandle_t handle;  // functionalize(?)
-    cublasCreate(&handle);
-
-    chrono::system_clock::time_point t0, t1;
-    chrono::duration<double> dt, dt1, dtrans;
-
-    const long long N = 1e5, d = 1e5;
-
-    h = 1e-2;
-    t1 = now();
-    for (int i = 0; i < nDev; i++)
-    gpuErrchk(cudaMalloc((void**)&dA[i], (N / nDev) * d * sizeof(float)));
-    gpuErrchk(cudaMalloc((void**)&dx, d * sizeof(float)));
-    gpuErrchk(cudaMalloc((void**)&dy, N * sizeof(float)));
-    gpuErrchk(cudaMalloc((void**)&dx1, d * sizeof(float)));
-    t0 = now();
-    dtrans = generate_conditions(handle, dA, dx, dy, N, d);
-    dt1 = now() - t1 - dtrans;
-
-    F(handle, dA, dx, dy, N, d, F0); realiter = 0;
-    for (int iter = 0; iter < niter; iter+=updated, realiter++) {
-        cublasScopy(handle, d, dx, 1, dx1, 1);
-        newtheta(handle, dA, dx1, dy, N, d, h);
-        F(handle, dA, dx1, dy, N, d, F1);
-        if (F1 > F0) {
-            updated = 0;
-            h /= 2.f;
-        } else {
-            updated = 1;
-            cublasScopy(handle, d, dx1, 1, dx, 1);  // actual update
-            h *= 1.2f;
-            F0 = F1;
-        }
-    }
-
-    cudaFree(dA);
-    cudaFree(dx);
-    cudaFree(dy);
-    cudaFree(dx1);
-
-    dt = now() - t0;
-
-    printf(
-        "N: %6lld, d: %6lld, t_init: %7.3f ms, t_trans: %8.5f s, iterated: %4d, rmse: %10.5f, t: %8.5f s, time/iter: %9.4f ms\n",
-        N, d, dt1.count() * 1000, dtrans.count(), realiter, F0, dt.count(), dt.count() / realiter * 1000
-    );
-
-    cublasDestroy(handle);
-    cudaDeviceReset();
-    cudaProfilerStop();
-}
-
-void GPU_fill_rand(curandGenerator_t prng, float *dx, int size, float mean, float std) {
-    curandCreateGenerator(&prng, CURAND_RNG_PSEUDO_XORWOW);
-    curandSetPseudoRandomGeneratorSeed(prng, SEED);
-    curandGenerateNormal(prng, dx, size, mean, std);
-}
-
-chrono::duration<double> generate_conditions(
-    cublasHandle_t handle,
-    float *dA, float *dx, float *dy, int N, int d) {
-
-    curandGenerator_t prng;
-    GPU_fill_rand(prng, dA, N * d, 0., 9.);
-    GPU_fill_rand(prng, dx, d,     0., 3.);   // environment
-    GPU_fill_rand(prng, dy, N,     0., 1.);   // noise
-
-    // intentionally added this useless D2H transfer for the impartial time measurement.
-    float *A = new float[N * d], *y = new float[N];
-    chrono::system_clock::time_point t0 = now();
-    cublasGetMatrix(N, d, sizeof(float), dA, N, A, N);
-    cublasGetVector(N, sizeof(float), dy, 1, y, 1);
-    chrono::duration<double> dt = now() - t0;
-    delete[] A, y;
-
-    float alpha = 1.f, beta = 1.f;
-    cublasSgemv(
-        handle, CUBLAS_OP_N,
-        N, d, &alpha, dA, N,
-        dx, 1, &beta, dy, 1
-    );
-    GPU_fill_rand(prng, dx, d, 0., 3.);       // initial theta
-    return dt; 
-}
 
 void F(cublasHandle_t handle, float *dA, float *dx, float *dy, int N, int d, float &result) {
     float *tmpdy; cudaMalloc((void**)&tmpdy, N * sizeof(*dy));
@@ -126,31 +59,79 @@ void F(cublasHandle_t handle, float *dA, float *dx, float *dy, int N, int d, flo
     float alpha = 1.f, beta = -1.f;
     cublasSgemv(
         handle, CUBLAS_OP_N,
-        N, d, &alpha, dA, N,
+        N / 4, d, &alpha, dA, N / 4,
         dx, 1, &beta, tmpdy, 1
     );
     cublasSnrm2(handle, N, tmpdy, 1, &result);
-    result = sqrt(result * result / N); // RMSE
     cudaFree(tmpdy);
 }
 
-void newtheta(cublasHandle_t handle, float *dA, float *dx, float *dy, int N, int d, float h) {
-    float *tmpdy; cudaMalloc((void**)&tmpdy, N * sizeof(*dy));
-    cublasScopy(handle, N, dy, 1, tmpdy, 1);
+void worker(int rank) {
+    
+    cudaSetDevice(rank);
 
-    float alpha = 1.f, beta = -1.f;
-    cublasSgemv(
-        handle, CUBLAS_OP_N,
-        N, d, &alpha, dA, N,
-        dx, 1, &beta, tmpdy, 1
-    );
+    cublasHandle_t handle;
+    auto& blas_stream = blas_streams[rank];
+    cublasCreate(&handle);
+    cublasSetStream(handle, blas_stream);
 
-    alpha = - 2.f * h, beta = 1.f;
-    cublasSgemv(
-        handle, CUBLAS_OP_T,
-        N, d, &alpha, dA, N,
-        tmpdy, 1, &beta, dx, 1
-    );
+    auto& nccl_stream = nccl_streams[rank];
+    
+    F(handle, d_X[rank], d_theta[rank], d_y[rank], N, d, F0[rank]);
 
-    cudaFree(tmpdy);
+    // sum F0's
+    /////////////////////////////////////////////////////////////////////////////////////
+    // how????????????????????????????????????? to do inter-thread sum??
+    // -> use MPI...
+}
+
+int main(int argc, char* argv[]) {
+    
+    // nccl init
+    ncclUniqueId nccl_id;
+    ncclGetUniqueId(&nccl_id);
+    ncclGroupStart();
+    for (int rank = 0; rank < nGPU; rank++) {
+        cudaSetDevice(rank);
+        ncclCommInitRank(&comms[rank], nGPU, nccl_id, rank);  // New communicators
+        cudaStreamCreate(&nccl_streams[rank]);
+        cudaStreamCreate(&blas_streams[rank]);
+    }
+    ncclGroupEnd();
+
+    // data init
+    for (int rank = 0; rank < nGPU; rank++) {
+        // host alloc
+        h_X = new float[NdGPU];
+        h_y = new float[N];
+        h_theta = new float[d];
+        // host init
+        for (int i = 0; i < NdGPU; i++) h_X[i] = 1;
+        for (int i = 0; i < N; i++) h_y[i] = 0;
+        for (int j = 0; j < d; j++) h_theta[j] = 1;
+        // cuda alloc
+        cudaSetDevice(rank);
+        cudaMalloc((void**)&d_X[rank], NdGPU * sizeof(float));
+        cudaMalloc((void**)&d_y[rank], N * sizeof(float));
+        cudaMalloc((void**)&d_theta[rank], d * sizeof(float));
+        // cublas init
+        cublasSetVector(NdGPU, sizeof(float), h_X, 1, d_X[rank], 1);
+        cublasSetVector(N, sizeof(float), h_y, 1, d_y[rank], 1);
+        cublasSetVector(d, sizeof(float), h_theta, 1, d_theta[rank], 1);
+        // host free
+        delete[] h_X, h_y, h_theta;
+    }
+
+    vector<thread> threads;
+    for (int rank = 0; rank < nGPU; rank++) {
+        thread t(bind(&worker, rank));
+        threads.push_back(move(t));
+    }
+    for (auto& t : threads) t.join();
+
+    float sum = 0;
+    for (int rank = 0; rank < nGPU; rank++) sum += F0[rank] * F0[rank];
+    cout << sum << endl;
+
+    delete[] comms, nccl_streams, blas_streams;
 }

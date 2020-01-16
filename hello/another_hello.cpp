@@ -1,80 +1,101 @@
+#include <cuda_runtime.h>
+#include <cublas_v2.h>
+#include <device_launch_parameters.h>
+
 #include <iostream>
-#include <iomanip>
+#include <random>
 #include <chrono>
 #include <cmath>
+#include <bitset>
+#include <string>
+
+#include <thread>
+#include <nccl.h>
 using namespace std;
 
-// void func(int (*p)[3]) {
-//     for (int i = 0; i < 2; i++) for (int j = 0; j < 3; j++)
-//         cout << p[i][j] << (j == 2 ? "\n" : " ");
-// }
+#define IDX2C(i, j, ld) (((j) * (ld)) + (i))
+#define now() chrono::system_clock::now()
 
-// void square(const int *x) {
-//     for (int i = 0; i < 5; i++) x[i] *= x[i];
-// }
+#define CUDACHECK(cmd) do {                         \
+  cudaError_t e = cmd;                              \
+  if( e != cudaSuccess ) {                          \
+    printf("Failed: Cuda error %s:%d '%s'\n",       \
+        __FILE__,__LINE__,cudaGetErrorString(e));   \
+    exit(EXIT_FAILURE);                             \
+  }                                                 \
+} while(0)
 
-int main() {
 
-    const int N = 2300;
-    int data[N], cnts[10] = {0};
-    for (int i = 0; i < N; i++) {
-        data[i] = rand() % 10;
-        cnts[data[i]]++;
-    }
+#define NCCLCHECK(cmd) do {                         \
+  ncclResult_t r = cmd;                             \
+  if (r!= ncclSuccess) {                            \
+    printf("Failed, NCCL error %s:%d '%s'\n",       \
+        __FILE__,__LINE__,ncclGetErrorString(r));   \
+    exit(EXIT_FAILURE);                             \
+  }                                                 \
+} while(0)
 
-    for (int i = 0; i < N; i++) cout << data[i] << " ";
-    cout << endl << endl;
 
-    for (int j = 0; j < 10; j++) {
-        cout << j << " ";
-        printf("%6.3f %% ", cnts[j] / (double)N * 100);
-        for (int k = 0; k < cnts[j]; k++)
-            cout << "*";
-        cout << endl;
-    }
+int main(int argc, char* argv[])
+{
+  ncclComm_t comms[4];
 
-    ////////////////////////////////////////////////////////////////////////////////////////
 
-    // const int N = 100;
-    // char ch[N];
-    // for (int i = 0; i < N; i++) ch[i] = rand() % ('Z' - 'A' + 1) + 'A';
-    // for (int i = 0; i < N; i++) cout << ch[i];
-    // cout << endl;
-    // bool swapped;
-    // while (true) {
-    //     swapped = false;
-    //     for (int i = 0; i < N - 1; i++)
-    //         if (ch[i] < ch[i + 1]) {
-    //             swap(ch[i], ch[i + 1]);
-    //             swapped = true;
-    //         }
-    //     if (!swapped) break;
-    // }
-    // for (int i = 0; i < N; i++) cout << ch[i];
-    // cout << endl;
+  //managing 4 devices
+  int nDev = 4;
+  int size = 32 * 1024 * 1024;
+  int devs[4] = { 0, 1, 2, 3 };
 
-    ////////////////////////////////////////////////////////////////////////////////////////
 
-    // const int N = 10000;
-    // const int br = 30;
-    // int x[N];
-    // for (int i = 0; i < N; i++) x[i] = rand() % (30 * N);
+  //allocating and initializing device buffers
+  float** sendbuff = (float**)malloc(nDev * sizeof(float*));
+  float** recvbuff = (float**)malloc(nDev * sizeof(float*));
+  cudaStream_t* s = (cudaStream_t*)malloc(sizeof(cudaStream_t)*nDev);
 
-    // for (int i = 0; i < N; i++)
-    //     cout << setw(6) << x[i] << (i % br == (br - 1) ? "\n" : " ");
-    // cout << endl << endl << endl;
 
-    // bool swapped;
-    // while (true) {
-    //     swapped = false;
-    //     for (int i = 0; i < N - 1; i++)
-    //         if (x[i] < x[i + 1]) {
-    //             swap(x[i], x[i + 1]);
-    //             swapped = true;
-    //         }
-    //     if (!swapped) break;
-    // }
+  for (int i = 0; i < nDev; ++i) {
+    CUDACHECK(cudaSetDevice(i));
+    CUDACHECK(cudaMalloc(sendbuff + i, size * sizeof(float)));
+    CUDACHECK(cudaMalloc(recvbuff + i, size * sizeof(float)));
+    CUDACHECK(cudaMemset(sendbuff[i], 1, size * sizeof(float)));
+    CUDACHECK(cudaMemset(recvbuff[i], 0, size * sizeof(float)));
+    CUDACHECK(cudaStreamCreate(s+i));
+  }
 
-    // for (int i = 0; i < N; i++)
-    //     cout << setw(6) << x[i] << (i % br == (br - 1) ? "\n" : " ");
+
+  //initializing NCCL
+  NCCLCHECK(ncclCommInitAll(comms, nDev, devs));
+
+
+   //calling NCCL communication API. Group API is required when using
+   //multiple devices per thread
+  NCCLCHECK(ncclGroupStart());
+  for (int i = 0; i < nDev; ++i)
+    NCCLCHECK(ncclAllReduce((const void*)sendbuff[i], (void*)recvbuff[i], size, ncclFloat, ncclSum,
+        comms[i], s[i]));
+  NCCLCHECK(ncclGroupEnd());
+
+
+  //synchronizing on CUDA streams to wait for completion of NCCL operation
+  for (int i = 0; i < nDev; ++i) {
+    CUDACHECK(cudaSetDevice(i));
+    CUDACHECK(cudaStreamSynchronize(s[i]));
+  }
+
+
+  //free device buffers
+  for (int i = 0; i < nDev; ++i) {
+    CUDACHECK(cudaSetDevice(i));
+    CUDACHECK(cudaFree(sendbuff[i]));
+    CUDACHECK(cudaFree(recvbuff[i]));
+  }
+
+
+  //finalizing NCCL
+  for(int i = 0; i < nDev; ++i)
+      ncclCommDestroy(comms[i]);
+
+
+  printf("Success \n");
+  return 0;
 }

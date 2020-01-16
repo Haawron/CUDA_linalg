@@ -39,7 +39,7 @@ int main() {
     chrono::system_clock::time_point t0, t1;
     chrono::duration<double> dt, dt1, dtrans;
 
-    for (long long N = 1e3; N < 1e6; N *= 10) for (long long d = 1e2; d < 1e6; d *= 10) {
+    for (int64_t N = 1e3; N < 1e6; N *= 10) for (int64_t d = 1e2; d < 1e6; d *= 10) {
         h = 1e-2;
         t1 = now();
         gpuErrchk(cudaMalloc((void**)&dA, N * d * sizeof(float)));
