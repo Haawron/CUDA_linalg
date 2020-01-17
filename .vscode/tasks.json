@@ -34,13 +34,30 @@
             "label": "build with nvcc for CUDA",
             "command": "nvcc",
             "args": [
+                "-lcublas",     // cublas_v2.h
+                "-lcurand",     // curand.h
+                "-lnccl",       // nccl.h
+                "-std=c++11",   // low version of g++
+                
+                // check arguments by $ mpic++ -showme
+                // $ mpic++ is nothing but a wrapper of g++ command with openmpi.
+                // mpi.h : openmpi
+                "-I/usr/lib/openmpi/include/openmpi/opal/mca/event/libevent2021/libevent",
+                "-I/usr/lib/openmpi/include/openmpi/opal/mca/event/libevent2021/libevent/include",
+                "-I/usr/lib/openmpi/include",
+                "-I/usr/lib/openmpi/include/openmpi",
+                // "-pthread",
+                // "-Wl,-rpath",
+                // "-Wl,/usr/lib/openmpi/lib",
+                // "-Wl,--enable-new-dtags",
+                // "-L/usr/lib/openmpi/lib",
+                "-lmpi_cxx",
+                "-lmpi",
+
+                // link
                 "${file}",
                 "-o",
-                "${fileDirname}/${fileBasenameNoExtension}",
-                "-lcublas",
-                "-lcurand",
-                "-lnccl",
-                "-std=c++11"
+                "${fileDirname}/${fileBasenameNoExtension}"
             ],
             "group": "build"
         },
@@ -48,6 +65,15 @@
             "label": "execute",
             "command": "${fileDirname}/${fileBasenameNoExtension}",
             "group": "test"
+        },
+        {
+            "label": "execute with MPIexec",
+            "command": "mpiexec",  // check https://www.mpich.org/static/docs/v3.1/www1/mpiexec.html
+            "group": "test",
+            "args": [
+                "-n", "4",  // number of processes
+                "${fileDirname}/${fileBasenameNoExtension}"
+            ]
         },
         {
             "label": "Run with PYTHON interpreter (just commands \"python\")",

@@ -78,11 +78,12 @@ void worker(int rank) {
     auto& nccl_stream = nccl_streams[rank];
     
     F(handle, d_X[rank], d_theta[rank], d_y[rank], N, d, F0[rank]);
+    if (rank == 0) {
+        for (int r = 1; r < nGPU; r++) F0[0] += F0[r];
+        for (int r = 1; r < nGPU; r++) F0[r] = F0[0];
+    }
 
-    // sum F0's
-    /////////////////////////////////////////////////////////////////////////////////////
-    // how????????????????????????????????????? to do inter-thread sum??
-    // -> use MPI...
+    
 }
 
 int main(int argc, char* argv[]) {
