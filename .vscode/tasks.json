@@ -54,7 +54,6 @@
                 "-lmpi_cxx",
                 "-lmpi",
 
-                // link
                 "${file}",
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}"
@@ -76,10 +75,10 @@
             ]
         },
         {
-            "label": "Run with PYTHON interpreter (just commands \"python\")",
+            "label": "execute with python",
             "command": "python",
             "args": ["${file}"],
-            "group": "build"
+            "group": "test"
         }
     ]
 }

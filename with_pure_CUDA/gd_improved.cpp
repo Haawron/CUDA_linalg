@@ -39,7 +39,7 @@ int main() {
     chrono::system_clock::time_point t0, t1;
     chrono::duration<double> dt, dt1, dtrans;
 
-    for (int64_t N = 1e3; N < 1e6; N *= 10) for (int64_t d = 1e2; d < 1e6; d *= 10) {
+    for (size_t N = 1e3; N < 1e6; N *= 10) for (size_t d = 1e2; d < 1e6; d *= 10) {
         h = 1e-2;
         t1 = now();
         gpuErrchk(cudaMalloc((void**)&dA, N * d * sizeof(float)));
@@ -74,7 +74,7 @@ int main() {
         dt = now() - t0;
 
         printf(
-            "N: %6lld, d: %6lld, t_init: %7.3f ms, t_trans: %8.5f s, iterated: %4d, rmse: %10.5f, t: %8.5f s, time/iter: %9.4f ms\n",
+            "N: %6lu, d: %6lu, t_init: %7.3f ms, t_trans: %8.5f s, iterated: %4d, rmse: %10.5f, t: %8.5f s, time/iter: %9.4f ms\n",
             N, d, dt1.count() * 1000, dtrans.count(), realiter, F0, dt.count(), dt.count() / realiter * 1000
         );
     }
@@ -84,8 +84,6 @@ int main() {
 }
 
 void GPU_fill_rand(curandGenerator_t prng, float *dx, int size, float mean, float std) {
-    curandCreateGenerator(&prng, CURAND_RNG_PSEUDO_XORWOW);
-    curandSetPseudoRandomGeneratorSeed(prng, SEED);
     curandGenerateNormal(prng, dx, size, mean, std);
 }
 
@@ -94,9 +92,11 @@ chrono::duration<double> generate_conditions(
     float *dA, float *dx, float *dy, int N, int d) {
 
     curandGenerator_t prng;
-    GPU_fill_rand(prng, dA, N * d, 0., 9.);
-    GPU_fill_rand(prng, dx, d,     0., 3.);   // environment
-    GPU_fill_rand(prng, dy, N,     0., 1.);   // noise
+    curandCreateGenerator(&prng, CURAND_RNG_PSEUDO_XORWOW);
+    curandSetPseudoRandomGeneratorSeed(prng, SEED);
+    curandGenerateNormal(prng, dA, N * d, 0., 9.);
+    curandGenerateNormal(prng, dx, d,     0., 3.);   // environment
+    curandGenerateNormal(prng, dy, N,     0., 1.);   // noise
 
     // intentionally added this useless D2H transfer for the impartial time measurement.
     float *A = new float[N * d], *y = new float[N];
@@ -112,7 +112,7 @@ chrono::duration<double> generate_conditions(
         N, d, &alpha, dA, N,
         dx, 1, &beta, dy, 1
     );
-    GPU_fill_rand(prng, dx, d, 0., 3.);       // initial theta
+    curandGenerateNormal(prng, dx, d, 0., 3.);       // initial theta
     return dt; 
 }
 

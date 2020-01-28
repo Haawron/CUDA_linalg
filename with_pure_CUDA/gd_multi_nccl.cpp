@@ -225,9 +225,9 @@ int main(int argc, char* argv[]) {
     const size_t Nd = N * d;
     const size_t Nd_gpu = Nd / nRanks;  // N * d / nGPUs
     float *d_X, *d_y, *d_theta, *d_theta1, done;
-    double h, F0, F1, crit = 0., eps = 1e-4;
+    double h, F0, F1, crit = 0., eps = 1e-6;
     int updated, realiter, iter;
-    const int niter = 1e6;
+    const int niter = 1e4;
     string s;
 
     chrono::system_clock::time_point    t0, t1;
@@ -266,24 +266,27 @@ int main(int argc, char* argv[]) {
         } else {
 
             // logging
-            if (iter % 10 == 9 && myRank == 0) {
+            if (iter % 5 == 4 && myRank == 0) {
                 done = (iter + 1) / (float)niter;
                 s.clear();
                 for (int i = 0; i < 30 * done; i++) s += "="; s += ">";
                 for (int i = 0; i < 30 * (1. - done); i++) s += " ";
-                printf("\r[ Step %7d / %7d | ", iter + 1, niter);
+                printf("\r[ Step %5d / %5d | ", iter + 1, niter);
                 cout << s << " ]";
                 printf(" F0: %10.6f, F1: %10.6f", sqrt(F0 / N), sqrt(F1 / N));
             }
+            // MPICHECK(MPI_Barrier(MPI_COMM_WORLD));
 
             // early stopping
             crit = 1. - F1 / F0;
             if (crit > 0 && crit < eps) break;
-            // MPICHECK(MPI_Barrier(MPI_COMM_WORLD));
+
+            // update
             updated = 1;
             cublasScopy(handle, d, d_theta1, 1, d_theta, 1);
             h *= 1.2f;
             F0 = F1;
+
         }
         MPICHECK(MPI_Barrier(MPI_COMM_WORLD));
     }
